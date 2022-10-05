@@ -1,6 +1,4 @@
 import os
-#  Отоброжать только ошибки tensoflow
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 from tensorflow.python.saved_model import tag_constants
 import tensorflow as tf
 import cv2
@@ -8,15 +6,17 @@ import numpy as np
 import utils
 from PIL import Image
 
-
+#  Отоброжать только ошибки tensoflow
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 
 input_size = 416
 
 
 def load_images(image_path):
+    #  Загружаем обученную модель
     saved_model_loaded = tf.saved_model.load("./checkpoints/custom-416", tags=[tag_constants.SERVING])
-
+    #  Загружаем изображение
     original_image = cv2.imread(image_path)
     original_image = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
 
@@ -67,7 +67,7 @@ def load_images(image_path):
 
 
     image = utils.draw_bbox(original_image, pred_bbox, False, allowed_classes=allowed_classes,
-                            read_plate=False)
+                            read_plate=True)
 
     image = Image.fromarray(image.astype(np.uint8))
     if not False:
