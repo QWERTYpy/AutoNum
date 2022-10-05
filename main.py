@@ -70,7 +70,7 @@ def load_images(image_path):
                             read_plate=True)
 
     image = Image.fromarray(image.astype(np.uint8))
-    if not False:
+    if not True:
         image.show()
     image = cv2.cvtColor(np.array(image), cv2.COLOR_BGR2RGB)
     cv2.imwrite('./detections/' + "Img_det" + '.png', image)

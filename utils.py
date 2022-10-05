@@ -5,6 +5,7 @@ import numpy as np
 import tensorflow as tf
 import pytesseract
 import re
+import time
 
 
 # If you don't have tesseract executable in your PATH, include the following:
@@ -23,8 +24,8 @@ def recognize_plate(img, coords):
     gray = cv2.resize(gray, None, fx = 3, fy = 3, interpolation = cv2.INTER_CUBIC)
     # perform gaussian blur to smoothen image
     blur = cv2.GaussianBlur(gray, (5,5), 0)
-    #cv2.imshow("Gray", gray)
-    #cv2.waitKey(0)
+    # cv2.imshow("Gray", gray)
+    # cv2.waitKey(0)
     # threshold the image using Otsus method to preprocess for tesseract
     ret, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY_INV)
     #cv2.imshow("Otsu Threshold", thresh)
@@ -72,6 +73,7 @@ def recognize_plate(img, coords):
         rect = cv2.rectangle(im2, (x,y), (x+w, y+h), (0,255,0),2)
         # grab character region of image
         roi = thresh[y-5:y+h+5, x-5:x+w+5]
+        tmp_gray = gray[y-5:y+h+5, x-5:x+w+5]
         # perfrom bitwise not to flip image to black text on white background
         roi = cv2.bitwise_not(roi)
         # perform another blur on character region
@@ -81,6 +83,13 @@ def recognize_plate(img, coords):
             # clean tesseract text by removing any unwanted blank spaces
             clean_text = re.sub('[\W_]+', '', text)
             plate_num += clean_text
+            #cv2.imshow(text, roi)
+            #cv2.waitKey(0)
+            roi = cv2.cvtColor(np.array(roi), cv2.COLOR_BGR2RGB)
+            now_time = str(time.time())[0:10]
+            cv2.imwrite('./detections/' + clean_text + "_" + now_time +'_clean.png', roi)
+            cv2.imwrite('./detections/' + clean_text + "_" + now_time + '.png', tmp_gray)
+            #print('./detections/' + clean_text + str(time.time())[0:10]+ '.png')
         except: 
             text = None
     if plate_num != None:
