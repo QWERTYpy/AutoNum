@@ -5,6 +5,9 @@ import cv2
 import numpy as np
 import utils
 from PIL import Image
+import time
+import keras
+
 
 #  Отоброжать только ошибки tensoflow
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -13,7 +16,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 input_size = 416
 
 
-def load_images(image_path):
+def load_images(image_path,model):
     #  Загружаем обученную модель
     saved_model_loaded = tf.saved_model.load("./checkpoints/custom-416", tags=[tag_constants.SERVING])
     #  Загружаем изображение
@@ -66,13 +69,21 @@ def load_images(image_path):
     # allowed_classes = ['person']
 
 
-    image = utils.draw_bbox(original_image, pred_bbox, False, allowed_classes=allowed_classes,
-                            read_plate=True)
+    image = utils.draw_bbox(model, original_image, pred_bbox, False, allowed_classes=allowed_classes,
+                            read_plate=True,)
 
     image = Image.fromarray(image.astype(np.uint8))
     if not True:
         image.show()
     image = cv2.cvtColor(np.array(image), cv2.COLOR_BGR2RGB)
-    cv2.imwrite('./detections/' + "Img_det" + '.png', image)
-
-load_images("./images/car55.jpg")
+    now_time = str(time.time())[0:10]
+    cv2.imwrite(f"./detections/{now_time}.png", image)
+# Обработка изображений всех
+# for filename in os.listdir("./images"):
+#     load_images(f"./images/{filename}")
+#     print(filename)
+model = keras.models.load_model('lenet.h5')
+# Обработка изображений тестовых
+for filename in os.listdir("./img_test"):
+    load_images(f"./images/{filename}", model)
+    print(filename)
