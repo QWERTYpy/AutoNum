@@ -6,6 +6,7 @@ import tensorflow as tf
 import pytesseract
 import re
 import time
+import keras
 
 
 # If you don't have tesseract executable in your PATH, include the following:
@@ -13,7 +14,7 @@ pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tessera
 # Example tesseract_cmd = r'C:\Program Files (x86)\Tesseract-OCR\tesseract'
 
 # function to recognize license plate numbers using Tesseract OCR
-def recognize_plate(img, coords):
+def recognize_plate(img, coords, model):
     # separate coordinates from box
     xmin, ymin, xmax, ymax = coords
     # get the subimage that makes up the bounded region and take an additional 5 pixels on each side
@@ -47,6 +48,8 @@ def recognize_plate(img, coords):
     im2 = gray.copy()
     # create blank string to hold license plate number
     plate_num = ""
+    plate_num_AI = ""
+
     # loop through contours and find individual letters and numbers in license plate
     for cnt in sorted_contours:
         x,y,w,h = cv2.boundingRect(cnt)
@@ -78,25 +81,39 @@ def recognize_plate(img, coords):
         roi = cv2.bitwise_not(roi)
         # perform another blur on character region
         roi = cv2.medianBlur(roi, 5)
+        str = "0123456789ABCEHKMOPTXY"
         try:
             text = pytesseract.image_to_string(roi, config='-c tessedit_char_whitelist=0123456789ABCEHKMOPTXY --psm 8 --oem 3')
             # clean tesseract text by removing any unwanted blank spaces
             clean_text = re.sub('[\W_]+', '', text)
             plate_num += clean_text
-            #cv2.imshow(text, roi)
-            #cv2.waitKey(0)
-            roi = cv2.cvtColor(np.array(roi), cv2.COLOR_BGR2RGB)
-            now_time = str(time.time())[0:10]
-            cv2.imwrite('./detections/' + clean_text + "_" + now_time +'_clean.png', roi)
-            cv2.imwrite('./detections/' + clean_text + "_" + now_time + '.png', tmp_gray)
+            # cv2.imshow(text, roi)
+            # cv2.waitKey(0)
+            #roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+            #now_time = str(time.time())[0:10]
+            output = cv2.resize(roi, (100, 100), interpolation=cv2.INTER_AREA)
+
+            # cv2.imshow(clean_text, output)
+            # cv2.waitKey(0)
+            # Сохранение цифр и букв с номера
+            # if clean_text in "0123456789ABCEHKMOPTXY":
+            #     cv2.imwrite(f"./detections/{clean_text}/{clean_text}_{now_time}_clean.png", output)
+            # else:
+            #     cv2.imwrite('./detections/' + clean_text + "_" + now_time +'_clean.png', output)
+            output = np.divide(output, 255.0)
+            output = output.reshape(1, 100, 100, 1).astype('float32')
+            res = model.predict([output]).tolist()
+            res = res[0]
+            plate_num_AI += str[res.index(max(res))]
+            #cv2.imwrite('./detections/' + clean_text + "_" + now_time + '.png', tmp_gray)
             #print('./detections/' + clean_text + str(time.time())[0:10]+ '.png')
         except: 
             text = None
     if plate_num != None:
-        print("License Plate #: ", plate_num)
-    cv2.imshow("Character's Segmented", im2)
-    cv2.waitKey(0)
-    return plate_num
+        print("License Plate #: ", plate_num, "&", plate_num_AI)
+    #cv2.imshow("Character's Segmented", im2)
+    #cv2.waitKey(0)
+    return plate_num, plate_num_AI
 
 
 def read_class_names(class_file_name):
@@ -116,7 +133,7 @@ def format_boxes(bboxes, image_height, image_width):
         box[0], box[1], box[2], box[3] = xmin, ymin, xmax, ymax
     return bboxes
 
-def draw_bbox(image, bboxes, info = False, counted_classes = None, show_label=True, allowed_classes=list(read_class_names("./custom.names").values()), read_plate = False):
+def draw_bbox(model, image, bboxes, info = False, counted_classes = None, show_label=True, allowed_classes=list(read_class_names("./custom.names").values()), read_plate = False):
     classes = read_class_names("./custom.names")
     num_classes = len(classes)
     image_h, image_w, _ = image.shape
@@ -141,9 +158,9 @@ def draw_bbox(image, bboxes, info = False, counted_classes = None, show_label=Tr
         else:
             if read_plate:
                 height_ratio = int(image_h / 25)
-                plate_number = recognize_plate(image, coor)
+                plate_number, plate_number_AI = recognize_plate(image, coor, model)
                 if plate_number != None:
-                    cv2.putText(image, plate_number, (int(coor[0]), int(coor[1]-height_ratio)), 
+                    cv2.putText(image, f"{plate_number}&{plate_number_AI}", (int(coor[0]), int(coor[1]-height_ratio)),
                             cv2.FONT_HERSHEY_SIMPLEX, 1.25, (255,255,0), 2)
 
             bbox_color = colors[class_ind]
