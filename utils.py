@@ -35,8 +35,8 @@ def recognize_plate(img, coords, model):
     rect_kern = cv2.getStructuringElement(cv2.MORPH_RECT, (5,5))
     # apply dilation to make regions more clear
     dilation = cv2.dilate(thresh, rect_kern, iterations = 1)
-    #cv2.imshow("Dilation", dilation)
-    #cv2.waitKey(0)
+    # cv2.imshow("Dilation", dilation)
+    # cv2.waitKey(0)
     # find contours of regions of interest within license plate
     try:
         contours, hierarchy = cv2.findContours(dilation, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -91,7 +91,7 @@ def recognize_plate(img, coords, model):
             # cv2.waitKey(0)
             #roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
             #now_time = str(time.time())[0:10]
-            output = cv2.resize(roi, (100, 100), interpolation=cv2.INTER_AREA)
+
 
             # cv2.imshow(clean_text, output)
             # cv2.waitKey(0)
@@ -100,6 +100,8 @@ def recognize_plate(img, coords, model):
             #     cv2.imwrite(f"./detections/{clean_text}/{clean_text}_{now_time}_clean.png", output)
             # else:
             #     cv2.imwrite('./detections/' + clean_text + "_" + now_time +'_clean.png', output)
+
+            output = cv2.resize(roi, (100, 100), interpolation=cv2.INTER_AREA)
             output = np.divide(output, 255.0)
             output = output.reshape(1, 100, 100, 1).astype('float32')
             res = model.predict([output]).tolist()
