@@ -7,6 +7,8 @@ from local_utils import detect_lp
 from os.path import splitext, basename
 from keras.models import model_from_json
 import glob
+import time
+import random
 
 # Загружаем обученную модель https://github.com/quangnhat185/Plate_detect_and_recognize
 def load_model(path):
@@ -72,8 +74,8 @@ def get_plate(image_path, Dmax=608, Dmin=300):
 
 def covert_img(test_image):
     LpImg, cor = get_plate(test_image) # LpImg[0] Получаем изображение номера
-    print("Detect %i plate(s) in"%len(LpImg), splitext(basename(test_image))[0])
-    print("Coordinate of plate(s) in image: \n", cor)
+    # print("Detect %i plate(s) in"%len(LpImg), splitext(basename(test_image))[0])
+    # print("Coordinate of plate(s) in image: \n", cor)
 
     # Visualize our result
     # plt.figure(figsize=(12,5))
@@ -147,7 +149,7 @@ def covert_img(test_image):
         total_pixels = plate_image.shape[0] * plate_image.shape[1] # Разрешение изображения
         lower = 450 #total_pixels // 100  # heuristic param, can be fine tuned if necessary
         upper = 2000 #total_pixels // 20  # heuristic param, can be fine tuned if necessary
-        print(total_pixels,plate_image.shape)
+        # print(total_pixels,plate_image.shape)
         # Loop over the unique components
         for (i, label) in enumerate(np.unique(labels)):
             # If this is the background label, ignore it
@@ -195,17 +197,131 @@ def sort_contours(cnts,reverse = False):
 def mask_rect(img, cnts):
     img_h = img.shape[0]
     img_w = img.shape[1]
-    print(f"высота-{img_h}, ширина-{img_w}")
+    #print(f"высота-{img_h}, ширина-{img_w}")
     contours_list = []
     # Отсеиваем контуры явно не подходящие под начертания символов
     for c in sort_contours(cnts):
         (x, y, w, h) = cv2.boundingRect(c)
         ratio = h/w
-        print(f"x={x}, y={y}, w={w}, h={h}, низ={y + h}, ширина={x + w}, h/w = {h / w}")
+        #print(f"x={x}, y={y}, w={w}, h={h}, низ={y + h}, ширина={x + w}, h/w = {h / w}")
         if ratio <= 0.8 or ratio >= 4:
             continue
         contours_list.append((x,y,w,h))
+    # Проводим первичную классификацию найденных символов
+    list_order_char = [0]*8
+    list_order_char_error = [0] * 8
+    list_range = [80, 130, 180, 230, 280, 330, 380, 430]
+    ideal_contours = [0]*8
+    count_range = 0
+    for cont in contours_list:
+        for lrange in list_range:
+            if cont[0] < lrange:
+                # Найден первый символ
+                if not list_order_char[list_range.index(lrange)]:
+                    ideal_contours[list_range.index(lrange)] = cont
+                    list_order_char[list_range.index(lrange)] = 1
+                    break
+                else:
+                    list_order_char_error[list_range.index(lrange)] = 1
+                    break
 
+    # print(list_order_char)
+    # print(list_order_char_error)
+    # print(ideal_contours)
+    usr_small_h = []
+    usr_w = []
+    usr_large_h = []
+    usr_sdvig = []
+    usr_small_y = []
+    usr_large_y = []
+
+    for cont in ideal_contours:
+        _idx = ideal_contours.index(cont)
+        if cont:
+            if not list_order_char_error[_idx]:
+                if ideal_contours.index(cont) in [0,4,5,6,7]:
+                    usr_small_h.append(cont[3])
+                    if ideal_contours.index(cont) in [0, 4, 5]:
+                        usr_small_y.append(cont[1])
+                else:
+                    usr_large_h.append(cont[3])
+                    usr_large_y.append(cont[1])
+                usr_w.append(cont[2])
+        if cont:
+            if _idx < 7:
+                if ideal_contours[_idx+1]:
+                    usr_sdvig.append(ideal_contours[_idx+1][0]-ideal_contours[_idx][0])
+
+
+
+    usr_small_h = int(sum(usr_small_h)/len(usr_small_h))
+    usr_small_y = int(sum(usr_small_y)/len(usr_small_y))
+    usr_large_h = int(sum(usr_large_h)/len(usr_large_h))
+    usr_large_y = int(sum(usr_large_y)/len(usr_large_y))
+    usr_w = int(sum(usr_w)/len(usr_w))
+    usr_sdvig = int(sum(usr_sdvig)/len(usr_sdvig))
+    # print(usr_small_h,usr_w,usr_large_h, usr_sdvig,usr_small_y,usr_large_y)
+    err_flag = False
+    while sum(list_order_char) < 8:
+        err_flag = not err_flag
+        for err_ind in range(len(list_order_char)) if err_flag else range(len(list_order_char)-1, 0, -1):
+            if not list_order_char[err_ind]:
+                w = usr_w
+                if err_ind in [0, 4, 5]:
+                    h = usr_small_h
+                    y = usr_small_y
+                elif err_ind in [6, 7]:
+                    h = usr_small_h
+                    y = usr_small_y-10
+
+                else:
+                    h = usr_large_h
+                    y = usr_large_y
+                if err_ind < 7 and err_flag:
+                    if list_order_char[err_ind+1]:
+                        x = ideal_contours[err_ind + 1][0] - usr_sdvig
+                        ideal_contours[err_ind] = (x, y, w, h)
+                        list_order_char[err_ind] = 1
+                if err_ind > 0 and not err_flag:
+                    if list_order_char[err_ind-1]:
+                        x = ideal_contours[err_ind - 1][0] + usr_sdvig
+                        ideal_contours[err_ind] = (x, y, w, h)
+                        list_order_char[err_ind] = 1
+
+
+    for _ind in range(len(list_order_char_error)):
+        _y = ideal_contours[_ind][1]
+        _w = ideal_contours[_ind][2]
+        _h = ideal_contours[_ind][3]
+
+        if list_order_char_error[_ind]:
+            if _ind in [0,4,5]:
+                if abs(_y - usr_small_y) > 10: _y = usr_small_y
+                if abs(_w - usr_w) > 10: _w = usr_w
+                if abs(_h - usr_small_h) > 10: _h = usr_small_h
+            elif _ind in [6,7]:
+                if abs(_y - usr_small_y-10) > 10: _y = usr_small_y
+                if abs(_w - usr_w) > 10: _w = usr_w
+                if abs(_h - usr_small_h) > 10: _h = usr_small_h
+            else:
+                if abs(_y - usr_large_y) > 10: _y = usr_large_y
+                if abs(_w - usr_w) > 10: _w = usr_w
+                if abs(_h - usr_large_h) > 10: _h = usr_large_h
+            ideal_contours[_ind]=(ideal_contours[_ind][0],_y,_w,_h)
+
+
+    for _ind in range(len(ideal_contours)):
+        ideal_contours[_ind] = (ideal_contours[_ind][0]-10,ideal_contours[_ind][1]-10,ideal_contours[_ind][2]+20,ideal_contours[_ind][3]+20)
+
+
+
+
+
+
+
+
+
+    """
     # Объединяем контуры, которые накладываются друг на друга (для разорванных символов)
 
     flag_nalogeniya = True
@@ -223,7 +339,7 @@ def mask_rect(img, cnts):
         if count == len(contours_list)-2:
             flag_nalogeniya = False
     #print(f"x={x}, y={y}, w={w}, h={h}, низ={y+h}, ширина={x+w}, h/w = {h/w}")
-
+    
     # Упорядочиваем контуры
     def viborka(list_cont,ind):
         list_ind = []
@@ -258,49 +374,66 @@ def mask_rect(img, cnts):
                      (x1+3*w_sr_m+3*w_sr_b-int(w_sr/6),y_m-int(w_sr/4),w_sr_m-int(w_sr/4),h_m),(x1+4*w_sr_m+3*w_sr_b-int(w_sr/2),y_m-int(w_sr/4),w_sr_m-int(w_sr/4),h_m)]
 
     print(contours_list)
+    """
     #return contours_list
-    return ideal_contour
+    return ideal_contours
 
 
 for test_image in image_paths:
-    bin_im, msk_im = covert_img(test_image)
+    try:
+        bin_im, msk_im = covert_img(test_image)
 
-    # Find contours and get bounding box for each contour
-    cnts, _ = cv2.findContours(msk_im.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    #boundingBoxes = [cv2.boundingRect(c) for c in cnts]
+        # Find contours and get bounding box for each contour
+        cnts, _ = cv2.findContours(msk_im.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        #boundingBoxes = [cv2.boundingRect(c) for c in cnts]
 
-    #print(boundingBoxes)
-    # # Sort the bounding boxes from left to right, top to bottom
-    # # sort by Y first, and then sort by X if Ys are similar
-    # def compare(rect1, rect2):
-    #     if abs(rect1[1] - rect2[1]) > 10:
-    #         return rect1[1] - rect2[1]
-    #     else:
-    #         return rect1[0] - rect2[0]
-    #
-    #
-    # boundingBoxes = sorted(boundingBoxes, key=functools.cmp_to_key(compare))
+        #print(boundingBoxes)
+        # # Sort the bounding boxes from left to right, top to bottom
+        # # sort by Y first, and then sort by X if Ys are similar
+        # def compare(rect1, rect2):
+        #     if abs(rect1[1] - rect2[1]) > 10:
+        #         return rect1[1] - rect2[1]
+        #     else:
+        #         return rect1[0] - rect2[0]
+        #
+        #
+        # boundingBoxes = sorted(boundingBoxes, key=functools.cmp_to_key(compare))
 
 
-    for c in mask_rect(msk_im, cnts):
-        (x, y, w, h) = c
+        for c in mask_rect(msk_im, cnts):
+            (x, y, w, h) = c
+            if x < 0 : x = 0
+            if x > bin_im.shape[1] : x =  bin_im.shape[1]
+            if y<0: y=0
+            if y>bin_im.shape[0]: y = bin_im.shape[0]
 
-        # Draw bounding box arroung digit number
-        cv2.rectangle(bin_im, (x, y), (x + w, y + h), (255, 0, 0), 2)
-
-                # Sperate number and gibe prediction
-                # curr_num = thre_mor[y:y + h, x:x + w]
-                # curr_num = cv2.resize(curr_num, dsize=(digit_w, digit_h))
-                # _, curr_num = cv2.threshold(curr_num, 220, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-                # crop_characters.append(curr_num)
-    #plt.axis(False)
-    plt.figure()
-    plt.imshow(bin_im)
-    #plt.figure()
-    #plt.imshow(msk_im)
-    plt.tight_layout()
-    plt.show()
-
+            roi = bin_im[y:y+h, x:x+w]
+            #roi = cv2.bitwise_not(roi)
+            # plt.imshow(roi)
+            # # plt.figure()
+            # # plt.imshow(msk_im)
+            # plt.tight_layout()
+            # plt.show()
+            output = cv2.resize(roi, (100, 100), interpolation=cv2.INTER_AREA)
+            # Draw bounding box arroung digit number
+            # cv2.rectangle(bin_im, (x, y), (x + w, y + h), (255, 0, 0), 2)
+            now_time = str(time.time())[0:10]
+            cv2.imwrite(f"./detections/tmp/{now_time}_{random.randint(100, 200)}.png", output)
+                    # Sperate number and gibe prediction
+                    # curr_num = thre_mor[y:y + h, x:x + w]
+                    # curr_num = cv2.resize(curr_num, dsize=(digit_w, digit_h))
+                    # _, curr_num = cv2.threshold(curr_num, 220, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                    # crop_characters.append(curr_num)
+        #plt.axis(False)
+        cv2.imwrite(f"./detections/tmp/{now_time}_{random.randint(100, 200)}_bin.png", bin_im)
+        # plt.figure()
+        # plt.imshow(bin_im)
+        # #plt.figure()
+        # #plt.imshow(msk_im)
+        # plt.tight_layout()
+        # plt.show()
+    except:
+        print('Номер не распознан', test_image)
 
 
 
