@@ -73,7 +73,7 @@ def load_images(image_path,model):
                             read_plate=True,)
 
     image = Image.fromarray(image.astype(np.uint8))
-    if not True:
+    if not False:
         image.show()
     image = cv2.cvtColor(np.array(image), cv2.COLOR_BGR2RGB)
     now_time = str(time.time())[0:10]

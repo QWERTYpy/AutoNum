@@ -25,8 +25,8 @@ def recognize_plate(img, coords, model):
     gray = cv2.resize(gray, None, fx = 3, fy = 3, interpolation = cv2.INTER_CUBIC)
     # perform gaussian blur to smoothen image
     blur = cv2.GaussianBlur(gray, (5,5), 0)
-    # cv2.imshow("Gray", gray)
-    # cv2.waitKey(0)
+    cv2.imshow("Gray", gray)
+    cv2.waitKey(0)
     # threshold the image using Otsus method to preprocess for tesseract
     ret, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY_INV)
     #cv2.imshow("Otsu Threshold", thresh)

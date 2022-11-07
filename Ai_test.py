@@ -14,7 +14,7 @@ from keras.layers import Flatten, Conv2D, MaxPooling2D # new!
 
 model = keras.models.load_model('lenet.h5')
 
-path = "./test"
+path = "./pl_det"
 str="0123456789ABCEHKMOPTXY"
 for filename in os.listdir(path):
 
